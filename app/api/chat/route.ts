@@ -159,9 +159,6 @@ export async function POST(req: Request) {
           },
         }),
       },
-      onError: (error) => {
-        console.error('GROK STREAM ERROR:', error);
-      },
     });
 
     return result.toDataStreamResponse();
