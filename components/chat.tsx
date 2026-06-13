@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useChat } from 'ai/react';
 import ReactMarkdown from 'react-markdown';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,47 @@ export default function Chat() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // ---------- Voice Input ----------
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  const startListening = () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Speech recognition is not supported in this browser. Please use Chrome.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      handleInputChange({ target: { value: transcript } } as any);
+    };
+    recognition.onerror = (event: any) => {
+      console.error('Speech error:', event.error);
+      setListening(false);
+    };
+    recognition.onend = () => setListening(false);
+
+    recognition.start();
+    setListening(true);
+    recognitionRef.current = recognition;
+  };
+
+  // ---------- Text-to-Speech ----------
+  const speakMessage = (text: string) => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 1.0;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // ---------- Auto-scroll ----------
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -105,6 +146,17 @@ export default function Chat() {
                     {message.content}
                   </ReactMarkdown>
                 )}
+
+                {/* Text-to-speech button for assistant messages */}
+                {!isUser && (
+                  <button
+                    onClick={() => speakMessage(message.content)}
+                    className="ml-2 text-gray-400 hover:text-[#1A6B4A] transition-colors align-middle"
+                    aria-label="Read aloud"
+                  >
+                    🔊
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -139,6 +191,17 @@ export default function Chat() {
           autoComplete="off"
           aria-label="Symptom input"
         />
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={startListening}
+          disabled={listening}
+          className="shrink-0"
+          aria-label="Start voice input"
+        >
+          🎤
+        </Button>
         <Button
           type="submit"
           disabled={isLoading || !input.trim()}
