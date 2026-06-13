@@ -11,11 +11,26 @@ function hasEmergency(text: string): boolean {
 }
 
 export default function Chat() {
+  // ---------- Text-to-Speech ----------
+  const speakMessage = (text: string) => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 1.0;
+    window.speechSynthesis.speak(utterance);
+  };
+
   const { messages, input, handleInputChange, handleSubmit, isLoading } =
-    useChat({ api: '/api/chat' });
+    useChat({
+      api: '/api/chat',
+      onFinish: (message) => {
+        // Automatically speak the assistant's full response
+        speakMessage(message.content);
+      },
+    });
 
   const bottomRef = useRef<HTMLDivElement>(null);
-  const spokenMessageIds = useRef<Set<string>>(new Set());
 
   // ---------- Voice Input ----------
   const [listening, setListening] = useState(false);
@@ -46,27 +61,6 @@ export default function Chat() {
     setListening(true);
     recognitionRef.current = recognition;
   };
-
-  // ---------- Text-to-Speech ----------
-  const speakMessage = (text: string) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = 1.0;
-    window.speechSynthesis.speak(utterance);
-  };
-
-  // ---------- Auto-speak newest assistant message ----------
-  useEffect(() => {
-    if (messages.length === 0) return;
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage.role === 'assistant' && !spokenMessageIds.current.has(lastMessage.id)) {
-      spokenMessageIds.current.add(lastMessage.id);
-      // Small delay to let the UI render, then speak
-      setTimeout(() => speakMessage(lastMessage.content), 100);
-    }
-  }, [messages]);
 
   // ---------- Auto-scroll ----------
   useEffect(() => {
@@ -159,7 +153,7 @@ export default function Chat() {
                   </ReactMarkdown>
                 )}
 
-                {/* Manual replay button (kept for convenience) */}
+                {/* Manual replay (kept for convenience) */}
                 {!isUser && (
                   <button
                     onClick={() => speakMessage(message.content)}
