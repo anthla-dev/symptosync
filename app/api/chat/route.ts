@@ -25,124 +25,138 @@ const SLOT_MAP: Record<string, { datetime: string; provider: string }> = {
 };
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
+  try {
+    const { messages } = await req.json();
 
-  const result = await streamText({
-    model: xai('grok-beta'),
-    system: SYSTEM_PROMPT,
-    messages,
-    maxSteps: 10,
-    tools: {
-      get_available_slots: tool({
-        description:
-          'Fetch available appointment slots for a given medical specialty and optional date.',
-        parameters: z.object({
-          specialty: z
-            .string()
-            .describe(
-              'Medical specialty, e.g. general, dermatology, orthopedics, mental health'
-            ),
-          date: z
-            .string()
-            .optional()
-            .describe(
-              'Optional ISO date prefix to filter slots, e.g. 2026-06-14'
-            ),
+    if (!process.env.XAI_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: 'XAI_API_KEY is not set in environment' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const result = streamText({
+      model: xai('grok-3'),
+      system: SYSTEM_PROMPT,
+      messages,
+      maxSteps: 10,
+      tools: {
+        get_available_slots: tool({
+          description:
+            'Fetch available appointment slots for a given medical specialty and optional date.',
+          parameters: z.object({
+            specialty: z
+              .string()
+              .describe(
+                'Medical specialty, e.g. general, dermatology, orthopedics, mental health'
+              ),
+            date: z
+              .string()
+              .optional()
+              .describe('Optional ISO date prefix to filter slots, e.g. 2026-06-14'),
+          }),
+          execute: async ({ specialty, date }) => {
+            const slots = Object.entries(SLOT_MAP).map(([id, { datetime, provider }]) => ({
+              id,
+              datetime,
+              provider,
+              specialty,
+            }));
+            return date
+              ? slots.filter((s) => s.datetime.startsWith(date))
+              : slots;
+          },
         }),
-        execute: async ({ specialty, date }) => {
-          const slots = Object.entries(SLOT_MAP).map(([id, { datetime, provider }]) => ({
-            id,
-            datetime,
-            provider,
-            specialty,
-          }));
 
-          return date
-            ? slots.filter((s) => s.datetime.startsWith(date))
-            : slots;
-        },
-      }),
-
-      book_appointment: tool({
-        description:
-          'Book a confirmed appointment after the patient has selected a slot and provided their details.',
-        parameters: z.object({
-          slot_id: z
-            .string()
-            .describe('The ID of the appointment slot the patient selected'),
-          patient_name: z.string().describe('Full legal name of the patient'),
-          patient_email: z
-            .string()
-            .email()
-            .describe('Email address for booking confirmation'),
-          specialty: z
-            .string()
-            .describe('Medical specialty for this appointment'),
-        }),
-        execute: async ({ slot_id, patient_name, patient_email, specialty }) => {
-          const slot = SLOT_MAP[slot_id];
-
-          if (!slot) {
+        book_appointment: tool({
+          description:
+            'Book a confirmed appointment after the patient has selected a slot and provided their details.',
+          parameters: z.object({
+            slot_id: z
+              .string()
+              .describe('The ID of the appointment slot the patient selected'),
+            patient_name: z.string().describe('Full legal name of the patient'),
+            patient_email: z
+              .string()
+              .email()
+              .describe('Email address for booking confirmation'),
+            specialty: z
+              .string()
+              .describe('Medical specialty for this appointment'),
+          }),
+          execute: async ({ slot_id, patient_name, patient_email, specialty }) => {
+            const slot = SLOT_MAP[slot_id];
+            if (!slot) {
+              return {
+                success: false,
+                message: `Slot "${slot_id}" was not found. Please ask the patient to choose a valid slot.`,
+              };
+            }
+            const confirmationId = `CONF-${Math.random()
+              .toString(36)
+              .substring(2, 8)
+              .toUpperCase()}`;
             return {
-              success: false,
-              message: `Slot "${slot_id}" was not found. Please ask the patient to choose a valid slot.`,
+              success: true,
+              confirmation_id: confirmationId,
+              patient_name,
+              patient_email,
+              specialty,
+              datetime: slot.datetime,
+              provider: slot.provider,
+              message: `Appointment confirmed for ${patient_name} with ${slot.provider} on ${new Date(
+                slot.datetime
+              ).toLocaleString('en-US', {
+                dateStyle: 'long',
+                timeStyle: 'short',
+              })}. Confirmation ID: ${confirmationId}. A summary will be sent to ${patient_email}.`,
             };
-          }
-
-          const confirmationId = `CONF-${Math.random()
-            .toString(36)
-            .substring(2, 8)
-            .toUpperCase()}`;
-
-          return {
-            success: true,
-            confirmation_id: confirmationId,
-            patient_name,
-            patient_email,
-            specialty,
-            datetime: slot.datetime,
-            provider: slot.provider,
-            message: `Appointment confirmed for ${patient_name} with ${slot.provider} on ${new Date(
-              slot.datetime
-            ).toLocaleString('en-US', {
-              dateStyle: 'long',
-              timeStyle: 'short',
-            })}. Confirmation ID: ${confirmationId}. A summary will be sent to ${patient_email}.`,
-          };
-        },
-      }),
-
-      escalate_to_human: tool({
-        description:
-          'Immediately escalate to emergency services when life-threatening symptoms are detected. Call this before saying anything else in an emergency.',
-        parameters: z.object({
-          reason: z
-            .string()
-            .describe(
-              'The specific emergency symptom or situation that triggered escalation'
-            ),
-          severity: z
-            .enum(['high', 'critical'])
-            .describe(
-              '"critical" for immediate life threat (e.g. cardiac arrest, stroke), "high" for urgent but slightly less immediate (e.g. severe allergic reaction)'
-            ),
+          },
         }),
-        execute: async ({ reason, severity }) => {
-          return {
-            escalated: true,
-            severity,
-            reason,
-            emergency_number: '911',
-            timestamp: new Date().toISOString(),
-            message:
-              severity === 'critical'
-                ? '🚨 CRITICAL EMERGENCY DETECTED. Call 911 or your local emergency number immediately. Do not wait. A human agent has been alerted.'
-                : '🚨 URGENT: This situation requires immediate medical attention. Please call 911 or go to your nearest emergency room now. A human agent has been alerted.',
-          };
-        },
-      }),
-    },
-  });
 
-  return result.toDataStreamResponse();
+        escalate_to_human: tool({
+          description:
+            'Immediately escalate to emergency services when life-threatening symptoms are detected. Call this before saying anything else in an emergency.',
+          parameters: z.object({
+            reason: z
+              .string()
+              .describe(
+                'The specific emergency symptom or situation that triggered escalation'
+              ),
+            severity: z
+              .enum(['high', 'critical'])
+              .describe(
+                '"critical" for immediate life threat (e.g. cardiac arrest, stroke), "high" for urgent but slightly less immediate (e.g. severe allergic reaction)'
+              ),
+          }),
+          execute: async ({ reason, severity }) => {
+            return {
+              escalated: true,
+              severity,
+              reason,
+              emergency_number: '911',
+              timestamp: new Date().toISOString(),
+              message:
+                severity === 'critical'
+                  ? '🚨 CRITICAL EMERGENCY DETECTED. Call 911 or your local emergency number immediately. Do not wait. A human agent has been alerted.'
+                  : '🚨 URGENT: This situation requires immediate medical attention. Please call 911 or go to your nearest emergency room now. A human agent has been alerted.',
+            };
+          },
+        }),
+      },
+      onError: (error) => {
+        console.error('GROK STREAM ERROR:', error);
+      },
+    });
+
+    return result.toDataStreamResponse();
+  } catch (error: any) {
+    console.error('ROUTE ERROR:', error);
+    return new Response(
+      JSON.stringify({
+        error: error?.message || error?.toString() || 'Unknown error',
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
 }
