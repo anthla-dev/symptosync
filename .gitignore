@@ -1,5 +1,11 @@
-node_modules/
-.env.local
-.env*.local
+# v0 runtime files
+__v0_runtime_loader.js
+__v0_devtools.tsx
+__v0_jsx-dev-runtime.ts
+# Common ignores
+node_modules
 .next/
-.vercel
+.env*.local
+.DS_Store
+.env.local
+.env

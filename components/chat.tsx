@@ -61,7 +61,7 @@ export default function Chat() {
           return (
             <div
               key={message.id}
-              className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+              className={`flex animate-message-in ${isUser ? 'justify-end' : 'justify-start'}`}
             >
               <div
                 className={`
