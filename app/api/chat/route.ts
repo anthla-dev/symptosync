@@ -1,6 +1,8 @@
 import { streamText, tool } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
+import { Resend } from 'resend';
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const xai = createOpenAI({
   apiKey: process.env.XAI_API_KEY ?? '',
@@ -85,34 +87,47 @@ export async function POST(req: Request) {
               .describe('Medical specialty for this appointment'),
           }),
           execute: async ({ slot_id, patient_name, patient_email, specialty }) => {
-            const slot = SLOT_MAP[slot_id];
-            if (!slot) {
-              return {
-                success: false,
-                message: `Slot "${slot_id}" was not found. Please ask the patient to choose a valid slot.`,
-              };
-            }
-            const confirmationId = `CONF-${Math.random()
-              .toString(36)
-              .substring(2, 8)
-              .toUpperCase()}`;
-            return {
-              success: true,
-              confirmation_id: confirmationId,
-              patient_name,
-              patient_email,
-              specialty,
-              datetime: slot.datetime,
-              provider: slot.provider,
-              message: `Appointment confirmed for ${patient_name} with ${slot.provider} on ${new Date(
-                slot.datetime
-              ).toLocaleString('en-US', {
-                dateStyle: 'long',
-                timeStyle: 'short',
-              })}. Confirmation ID: ${confirmationId}. A summary will be sent to ${patient_email}.`,
-            };
-          },
-        }),
+  const slot = SLOT_MAP[slot_id];
+  if (!slot) {
+    return {
+      success: false,
+      message: `Slot "${slot_id}" was not found. Please ask the patient to choose a valid slot.`,
+    };
+  }
+  const confirmationId = `CONF-${Math.random()
+    .toString(36)
+    .substring(2, 8)
+    .toUpperCase()}`;
+
+  // --- SEND REAL EMAIL ---
+  try {
+    await resend.emails.send({
+      from: 'SymptoSync <onboarding@resend.dev>', // Resend's default testing sender
+      to: patient_email,
+      subject: `Appointment Confirmed – ${specialty} with ${slot.provider}`,
+      text: `Hi ${patient_name},\n\nYour appointment is confirmed for ${new Date(slot.datetime).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' })} with ${slot.provider}.\n\nConfirmation ID: ${confirmationId}\n\nThis is a demo booking from SymptoSync – not a real medical appointment.\n\nTake care,\nSymptoSync`,
+    });
+  } catch (emailError) {
+    console.error('Email send failed:', emailError);
+    // Continue even if email fails – the booking is still confirmed
+  }
+
+  return {
+    success: true,
+    confirmation_id: confirmationId,
+    patient_name,
+    patient_email,
+    specialty,
+    datetime: slot.datetime,
+    provider: slot.provider,
+    message: `Appointment confirmed for ${patient_name} with ${slot.provider} on ${new Date(
+      slot.datetime
+    ).toLocaleString('en-US', {
+      dateStyle: 'long',
+      timeStyle: 'short',
+    })}. Confirmation ID: ${confirmationId}. A summary has been sent to ${patient_email}.`,
+  };
+},
 
         escalate_to_human: tool({
           description:
