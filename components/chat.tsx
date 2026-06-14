@@ -149,11 +149,11 @@ export default function Chat() {
                   </ReactMarkdown>
                 )}
 
-                {/* Repeat button – floats right at the end of the text, no overlap */}
+                {/* Repeat button – placed right after the last sentence, no floating */}
                 {!isUser && (
                   <button
                     onClick={() => speakMessage(message.content)}
-                    className="float-right ml-2 inline-flex items-center justify-center w-6 h-6 rounded-full border border-gray-200 bg-white text-[#1A6B4A] hover:bg-[#1A6B4A]/10 hover:border-[#1A6B4A]/30 transition-colors"
+                    className="ml-2 inline-flex items-center justify-center w-6 h-6 rounded-full border border-gray-200 bg-white text-[#1A6B4A] hover:bg-[#1A6B4A]/10 hover:border-[#1A6B4A]/30 transition-colors"
                     aria-label="Repeat message"
                     title="Repeat"
                   >
