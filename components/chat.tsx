@@ -11,7 +11,6 @@ function hasEmergency(text: string): boolean {
 }
 
 export default function Chat() {
-  // ---------- Text-to-Speech ----------
   const speakMessage = (text: string) => {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
@@ -21,18 +20,16 @@ export default function Chat() {
     window.speechSynthesis.speak(utterance);
   };
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, append } =
+  const { messages, input, handleInputChange, handleSubmit, isLoading } =
     useChat({
       api: '/api/chat',
       onFinish: (message) => {
-        // Automatically speak the assistant's full response
         speakMessage(message.content);
       },
     });
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // ---------- Voice Input ----------
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<any>(null);
 
@@ -49,8 +46,7 @@ export default function Chat() {
     recognition.interimResults = false;
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
-      // Immediately send the voice message as a user message
-      append({ role: 'user', content: transcript });
+      handleInputChange({ target: { value: transcript } } as any);
     };
     recognition.onerror = (event: any) => {
       console.error('Speech error:', event.error);
@@ -63,7 +59,6 @@ export default function Chat() {
     recognitionRef.current = recognition;
   };
 
-  // ---------- Auto-scroll ----------
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -154,15 +149,14 @@ export default function Chat() {
                   </ReactMarkdown>
                 )}
 
-                {/* Repeat button for assistant messages */}
+                {/* Repeat button – absolutely positioned */}
                 {!isUser && (
                   <button
                     onClick={() => speakMessage(message.content)}
-                    className="ml-2 inline-flex items-center justify-center w-6 h-6 rounded-full border border-gray-200 bg-white text-[#1A6B4A] hover:bg-[#1A6B4A]/10 hover:border-[#1A6B4A]/30 transition-colors align-middle"
+                    className="absolute top-2 right-2 inline-flex items-center justify-center w-6 h-6 rounded-full border border-gray-200 bg-white text-[#1A6B4A] hover:bg-[#1A6B4A]/10 hover:border-[#1A6B4A]/30 transition-colors"
                     aria-label="Repeat message"
                     title="Repeat"
                   >
-                    {/* Circular arrow SVG */}
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       width="14"
